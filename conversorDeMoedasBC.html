@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conversor de moedas</title>
+
+    <style>
+        div {
+            margin: 5px;
+            padding: 5px;
+            border: 1px;
+            border-style: solid;
+        }
+    </style>
+</head>
+
+<body>
+    <div>
+        <h3>Conversor de moedas</h3>
+        <div>
+            <label for="idMoedaEntrada">Digite o valor de entrada a ser convertido:</label>
+            <input type="Number" id="idMoedaEntrada" min="0"></input>
+            <br><br>
+            <label for="idSelMoedaEntrada">Selecione a moeda do valor de entrada:</label>
+            <select name="nSelMoedaEntrada" id="idSelMoedaEntrada" onchange="captarMoedaEntrada()">
+                <option value="Selecionar">Selecionar</option>
+                <!-- Aqui, lista criada dinamicamente -->
+            </select>
+            <br><br>
+            <label for="idSelMoedaSaida">Selecione a moeda do valor de saída:</label>
+            <select name="nSelMoedaEntrada" id="idSelMoedaSaida" onchange="captarMoedaSaida()">
+                <option value="Selecionar">Selecionar</option>
+                <!-- Aqui, lista criada dinamicamente -->
+            </select>
+            <br><br>
+        </div>
+        <button id="idConverter" type="button">Converter</button>
+
+        <div id="idTextoSaida">
+            <div class="container p-2 my-2 border border-1 border-primary" id="idDivTxArea">
+                <textarea class="paragafo" id="idPSaida" rows="10" cols="60"></textarea>
+            </div>
+        </div>
+    </div>
+
+    <script>
+
+        /* Listas extraídas para teste de create lista de selector
+                
+                <option value="Real">Real</option>
+                <option value="Dólar Americano">Dólar Americano</option>
+                <option value="Euro">Euro</option>
+                <option value="Libra Esterlina">Libra Esterlina</option>
+                <option value="Dólar Canadense">Dólar Canadense</option>
+
+                <option value="Dólar Australiano">Dólar Australiano</option>
+                <option value="Franco Suíço">Franco Suíço</option>
+                <option value="Coroa Dinamarquesa">Coroa Dinamarquesa</option>
+                <option value="Iene">Iene</option>
+                <option value="Coroa Norueguesa">Coroa Norueguesa</option>
+                <option value="Coroa Sueca">Coroa Sueca</option>
+        */
+        let nmoeda
+        let moedaEntrada
+        let iIn
+        let moedaSaida
+        let iOut
+        let fatorSaida
+        let valorEntrada
+        let valorConvertido
+        let siglaEntrada
+        let siglaSaida
+        let moedaIn = []
+        let moedaOut = []
+        let siglaIn = []
+        let siglaOut = []
+        let fatorIn = []
+        let fatorOut = []
+        var temCotacao
+
+
+        //---------Data atual do sistema no formato do Banco Central:---------------------
+        var data = new Date(); //data tem muitos get model
+        var dia = String(data.getDate()).padStart(2, '0');
+        var mes = String(data.getMonth() + 1).padStart(2, '0');
+        var ano = data.getFullYear();
+        
+        if (data.getDay() == 6) {
+            dia = String(data.getDate() - 1).padStart(2, '0');
+        } else { 
+            if (data.getDay() == 0) {
+                dia = String(data.getDate() - 2).padStart(2, '0');
+            }
+        }
+        
+        var dataAtual = mes + '-' + dia + '-' + ano;
+        console.log("Data de hoje: " + dataAtual);
+        //-----------------------------------------------------
+
+        //----Carregar lista de moedas e a lista de cotações de moedas-----
+        //Pega a lista de moedas com cotação do Banco Central
+        loadListaMoedas()
+        //-------------------------------------------------------------
+
+
+        //Pega a lista de moedas com cotação do Banco Central
+        function loadListaMoedas() {
+            var xhr = new XMLHttpRequest()
+            xhr.open("GET", "https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/Moedas?$top=100&$format=json&$select=simbolo,nomeFormatado")
+            xhr.addEventListener("load", function () {
+                var resposta = xhr.responseText
+                var respostaOBJ = JSON.parse(resposta)
+                for (let i = 0; i < respostaOBJ.value.length; i++) {
+                    siglaIn[i] = respostaOBJ.value[i].simbolo;
+                    siglaOut[i] = siglaIn[i]
+                    moedaIn[i] = respostaOBJ.value[i].nomeFormatado;
+                    moedaOut[i] = moedaIn[i]
+                   
+                    //dataAtual="08-20-2021"
+                                      
+                    //console.log("Length");
+                    //console.log(respostaOBJ.value.length);
+                   
+                    buscarCotacao("'" + siglaIn[i] + "'", "'" + dataAtual + "'", i)
+                    
+                    
+                    loadSelectorsLists(i)
+                }
+                siglaIn[respostaOBJ.value.length] = "BRL";
+                siglaOut[respostaOBJ.value.length] = "BRL";
+                moedaIn[respostaOBJ.value.length] = "Real brasileiro";
+                moedaOut[respostaOBJ.value.length] = "Real brasileiro";
+                fatorIn[respostaOBJ.value.length] = "1.0";
+                fatorOut[respostaOBJ.value.length] = "1.0";
+                loadSelectorsLists(respostaOBJ.value.length)
+            })
+            xhr.send()
+            /*Dá um tempo de 500 ms
+            setTimeout(function () {
+                console.log("Após 500 ms");
+            }, 500);*/
+        }
+
+        //----------------------------------------------------
+        //Pega a cotação de moedas - Boletim - Paridade e Cotação de moeda por data
+        function buscarCotacao(moeda, data, i) {
+            var xhr = new XMLHttpRequest()
+            xhr.open("GET", "https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoMoedaDia(moeda=@moeda,dataCotacao=@dataCotacao)?@moeda=" + moeda + "&@dataCotacao=" + data + "&$top=100&$format=json&$select=cotacaoCompra,dataHoraCotacao")
+            xhr.addEventListener("load", function () {
+                var resposta = xhr.responseText
+                var respostaOBJ = JSON.parse(resposta)
+                //console.log(resposta)
+                //console.log(respostaOBJ)
+                //console.log(respostaOBJ.value)
+                console.log(respostaOBJ.value.length);
+                fatorIn[i] = respostaOBJ.value[respostaOBJ.value.length - 1].cotacaoCompra;
+                fatorOut[i] = fatorIn[i]
+            })
+            xhr.send()
+        }
+        //----------------------------------------------------
+
+        //------ Load listas de selectors ------------------------
+
+        function loadSelectorsLists(i) {
+            let itemlista
+            let seletMoedasIn
+            let seletMoedasOut
+            //Adiciona no select moedas Entrada
+            itemlista = document.createElement("option")
+            itemlista.innerHTML = moedaIn[i]
+            itemlista.value = moedaIn[i]
+            seletMoedasIn = document.getElementById("idSelMoedaEntrada")
+            seletMoedasIn.appendChild(itemlista)
+
+            //Adiciona no select moedas Saída
+            itemlista = document.createElement("option")
+            itemlista.innerHTML = moedaOut[i]
+            itemlista.value = moedaOut[i]
+            seletMoedasOut = document.getElementById("idSelMoedaSaida")
+            seletMoedasOut.appendChild(itemlista)
+        }
+        //----------------------------------------------------
+
+
+        function captarMoedaEntrada() {
+            let itemSelect = document.querySelector("#idSelMoedaEntrada")
+            moedaEntrada = itemSelect.options[itemSelect.selectedIndex].value
+            iIn = itemSelect.selectedIndex - 1
+            
+        }
+
+        function captarMoedaSaida() {
+            let itemSelect = document.querySelector("#idSelMoedaSaida")
+            moedaSaida = itemSelect.options[itemSelect.selectedIndex].value
+            iOut = itemSelect.selectedIndex - 1
+        }
+        /*
+        function fatorConversao(el) {
+            switch (el) {
+                case "Real":
+                    fatorSaida = 1
+                    siglaSaida = "R$"
+                    break;
+                case "Dólar Americano":
+                    fatorSaida = 0.18
+                    siglaSaida = "US$"
+                    break;
+                case "Euro":
+                    fatorSaida = 0.16
+                    siglaSaida = "€"
+                    break;
+                case "Libra Esterlina":
+                    fatorSaida = 0.14
+                    siglaSaida = "£"
+                    break;
+                case "Dólar Canadense":
+                    fatorSaida = 0.24
+                    siglaSaida = "C$"
+                    break;
+                case "Dólar Australiano":
+                    fatorSaida = 0.26
+                    siglaSaida = "AU$"
+                    break;
+                case "Franco Suíço":
+                    fatorSaida = 0.17
+                    siglaSaida = "Fr"
+                    break;
+                case "Coroa Dinamarquesa":
+                    fatorSaida = 1.18
+                    siglaSaida = "kr"
+                    break;
+                case "Iene":
+                    fatorSaida = 20.27
+                    siglaSaida = "¥"
+                    break;
+                case "Coroa Norueguesa":
+                    fatorSaida = 1.67
+                    siglaSaida = "kr"
+                    break;
+                case "Coroa Sueca":
+                    fatorSaida = 1.63
+                    siglaSaida = "kr"
+                    break;
+                default:
+                    break;
+            }
+        }*/
+
+        //Event Handler
+        var botao = document.getElementById("idConverter")
+        botao.onclick = function () {
+           // let fatorEntrada
+            valorEntrada = Number(document.getElementById("idMoedaEntrada").value)
+            
+            
+            //console.log(fatorIn[iIn]);
+            console.log(valorEntrada);
+            console.log(moedaEntrada); 
+            console.log(iIn);
+            console.log(siglaIn[iIn]);
+            console.log(fatorIn[iIn]);
+
+            console.log(moedaSaida);
+            console.log(iOut);
+            console.log(siglaOut[iOut]);
+            console.log(fatorOut[iOut]);
+
+            valorConvertido = valorEntrada * fatorIn[iIn] / fatorOut[iOut]
+            
+            console.log(valorConvertido.toFixed(4))
+            
+            let texto = document.getElementById("idPSaida")
+            texto.value = "Data da conversão: " + dataAtual + "\n" + "\n"
+                +"Valor de entrada (" + siglaIn[iIn] + "): " + valorEntrada + " (" + moedaEntrada + ")\n" + "\n"
+                + "Valor de saída (" + siglaOut[iOut] + "): " + valorConvertido.toFixed(4) + " (" + moedaSaida + ")\n" + "\n"
+                + "(Valores de referência para conversão (valores em reais): " + "\n"
+                + siglaIn[iIn] + " " + fatorIn[iIn] + " e " + siglaOut[iOut] + " " + fatorOut[iOut] + ")"
+            /*
+            fatorConversao(moedaSaida)
+            switch (moedaEntrada) {
+                case "Real":
+                    fatorEntrada = 1
+                    siglaEntrada = "R$"
+                    valorConvertido = valorEntrada * fatorSaida / fatorEntrada
+                    break;
+                case "Dólar Americano":
+                    fatorEntrada = 0.18
+                    siglaEntrada = "US$"
+                    valorConvertido = valorEntrada * fatorSaida / fatorEntrada
+                    break;
+                case "Euro":
+                    fatorEntrada = 0.16
+                    siglaEntrada = "€"
+                    valorConvertido = valorEntrada * fatorSaida / fatorEntrada
+                    break;
+                case "Libra Esterlina":
+                    fatorEntrada = 0.14
+                    siglaEntrada = "£"
+                    valorConvertido = valorEntrada * fatorSaida / fatorEntrada
+                    break;
+                case "Dólar Canadense":
+                    fatorEntrada = 0.24
+                    siglaEntrada = "C$"
+                    valorConvertido = valorEntrada * fatorSaida / fatorEntrada
+                    break;
+                case "Dólar Australiano":
+                    fatorEntrada = 0.26
+                    siglaEntrada = "AU$"
+                    valorConvertido = valorEntrada * fatorSaida / fatorEntrada
+                    break;
+                case "Franco Suíço":
+                    fatorEntrada = 0.17
+                    siglaEntrada = "Fr"
+                    valorConvertido = valorEntrada * fatorSaida / fatorEntrada
+                    break;
+                case "Coroa Dinamarquesa":
+                    fatorEntrada = 1.18
+                    siglaEntrada = "kr"
+                    valorConvertido = valorEntrada * fatorSaida / fatorEntrada
+                    break;
+                case "Iene":
+                    fatorEntrada = 20.27
+                    siglaEntrada = "¥"
+                    valorConvertido = valorEntrada * fatorSaida / fatorEntrada
+                    break;
+                case "Coroa Norueguesa":
+                    fatorEntrada = 1.67
+                    siglaEntrada = "kr"
+                    valorConvertido = valorEntrada * fatorSaida / fatorEntrada
+                    break;
+                case "Coroa Sueca":
+                    fatorEntrada = 1.63
+                    siglaEntrada = "kr"
+                    valorConvertido = valorEntrada * fatorSaida / fatorEntrada
+                    break;
+
+                default:
+                    break;
+                }
+                */
+                /*
+            console.log(valorConvertido)
+            let texto = document.getElementById("idPSaida")
+            texto.value = "Valor de entrada (" + siglaEntrada + "): " + valorEntrada + " (" + moedaEntrada + ")\n"
+                + "Valor de saída (" + siglaSaida + "): " + valorConvertido.toFixed(2) + " (" + moedaSaida + ")\n"
+                + "Valor de referência para conversão: " + siglaEntrada + " " + fatorEntrada + " <--> " + siglaSaida + " " + fatorSaida
+                */
+        }
+
+    </script>
+</body>
+
+</html>
