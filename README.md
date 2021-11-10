@@ -1,2 +1,2 @@
 # projeconvmoedas
-Esse projeto converte qualquer moeda em reais, usando a api do Banco Central.
+Esse projeto converte moedas com taxas de câmbio em tempo real, usando a api do Banco Central.
